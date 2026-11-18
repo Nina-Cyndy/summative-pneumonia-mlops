@@ -4,5 +4,7 @@ __pycache__/
 .ipynb_checkpoints/
 data/uploads/
 data/raw/
+data/test/
+data/train/
 .env
 .DS_Store
