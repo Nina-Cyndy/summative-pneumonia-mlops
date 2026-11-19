@@ -1,9 +1,10 @@
 """
 Prediction: load the saved model once, then classify uploaded images.
-Used by the notebook, the FastAPI service and (indirectly) the UI.
+Used by the notebook and the FastAPI service.
 """
 import json
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -28,7 +29,7 @@ def load_model(force: bool = False):
         if _model is None or force:
             if not MODEL_PATH.exists():
                 raise FileNotFoundError(f"No trained model at {MODEL_PATH}. Train one first.")
-            _model = tf.keras.models.load_model(MODEL_PATH)
+            _model = tf.keras.models.load_model(MODEL_PATH, compile=False)  # inference only
             if CLASS_NAMES_PATH.exists():
                 _class_names = json.loads(CLASS_NAMES_PATH.read_text())
             else:
@@ -40,9 +41,20 @@ def reload_model():
     return load_model(force=True)
 
 
+def is_loaded() -> bool:
+    return _model is not None
+
+
+def model_version() -> str | None:
+    """Last-modified time of the model file (changes whenever a retrain is promoted)."""
+    if not MODEL_PATH.exists():
+        return None
+    return datetime.fromtimestamp(MODEL_PATH.stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
+
+
 def _predict_array(batch: np.ndarray) -> dict:
     model, class_names = load_model()
-    probs = model.predict(batch, verbose=0)[0]
+    probs = model(batch, training=False).numpy()[0]   # faster than predict() for one image
     idx = int(np.argmax(probs))
     return {
         "label": class_names[idx],

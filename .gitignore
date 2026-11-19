@@ -2,9 +2,13 @@ __pycache__/
 *.pyc
 .venv/
 .ipynb_checkpoints/
-data/uploads/
+.env
 data/raw/
+data/uploads/
 data/test/
 data/train/
-.env
-.DS_Store
+data/retrain_tmp/
+data/app.db
+demo_uploads/
+models/archive/
+models/pneumonia_model.tmp.h5
