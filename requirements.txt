@@ -4,6 +4,7 @@ pandas
 scikit-learn
 matplotlib
 seaborn
+plotly
 pillow
 kagglehub
 jupyter
