@@ -5,8 +5,6 @@ __pycache__/
 .env
 data/raw/
 data/uploads/
-data/test/
-data/train/
 data/retrain_tmp/
 data/app.db
 demo_uploads/

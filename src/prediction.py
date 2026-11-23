@@ -1,8 +1,16 @@
 """
 Prediction: load the saved model once, then classify uploaded images.
 Used by the notebook and the FastAPI service.
+
+Production behaviour:
+  * the model file is watched: when a retrain is promoted (file replaced), every serving
+    process reloads it automatically on its next request
+  * inference runs through a compiled tf.function (faster than calling the model eagerly)
+  * TF_INTRA_THREADS / TF_INTER_THREADS cap TensorFlow's CPU threads so that several
+    containers can share one machine fairly
 """
 import json
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +18,16 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
-from src.preprocessing import get_class_names, preprocess_image_bytes, preprocess_image_path
+from src.preprocessing import IMG_SIZE, get_class_names, preprocess_image_bytes, preprocess_image_path
+
+for _env, _setter in (("TF_INTRA_THREADS", tf.config.threading.set_intra_op_parallelism_threads),
+                      ("TF_INTER_THREADS", tf.config.threading.set_inter_op_parallelism_threads)):
+    _n = int(os.getenv(_env, "0"))
+    if _n > 0:
+        try:
+            _setter(_n)
+        except RuntimeError:        # TensorFlow already initialised: keep its defaults
+            pass
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = ROOT / "models" / "pneumonia_model.h5"
@@ -18,22 +35,36 @@ CLASS_NAMES_PATH = ROOT / "models" / "class_names.json"
 
 _model = None
 _class_names = None
+_infer = None
+_loaded_mtime = None
 _lock = threading.Lock()
 
 
+def _build_infer(model):
+    """Compiled inference function; falls back to eager calls if tracing fails."""
+    try:
+        fn = tf.function(lambda x: model(x, training=False),
+                         input_signature=[tf.TensorSpec([None, *IMG_SIZE, 3], tf.float32)])
+        fn(np.zeros((1, *IMG_SIZE, 3), dtype="float32"))     # warm-up: trace once
+        return fn
+    except Exception:                                         # noqa: BLE001
+        return lambda x: model(x, training=False)
+
+
 def load_model(force: bool = False):
-    """Load the model once and cache it. force=True reloads from disk
-    (used after retraining so the API serves the new model)."""
-    global _model, _class_names
+    """Return (model, class_names). (Re)loads when forced, on first use, or when the
+    model file on disk has changed since it was loaded."""
+    global _model, _class_names, _infer, _loaded_mtime
     with _lock:
-        if _model is None or force:
-            if not MODEL_PATH.exists():
+        mtime = MODEL_PATH.stat().st_mtime if MODEL_PATH.exists() else None
+        if _model is None or force or (mtime is not None and mtime != _loaded_mtime):
+            if mtime is None:
                 raise FileNotFoundError(f"No trained model at {MODEL_PATH}. Train one first.")
-            _model = tf.keras.models.load_model(MODEL_PATH, compile=False)  # inference only
-            if CLASS_NAMES_PATH.exists():
-                _class_names = json.loads(CLASS_NAMES_PATH.read_text())
-            else:
-                _class_names = get_class_names()
+            _model = tf.keras.models.load_model(MODEL_PATH, compile=False)   # inference only
+            _class_names = (json.loads(CLASS_NAMES_PATH.read_text())
+                            if CLASS_NAMES_PATH.exists() else get_class_names())
+            _infer = _build_infer(_model)
+            _loaded_mtime = mtime
     return _model, _class_names
 
 
@@ -53,8 +84,8 @@ def model_version() -> str | None:
 
 
 def _predict_array(batch: np.ndarray) -> dict:
-    model, class_names = load_model()
-    probs = model(batch, training=False).numpy()[0]   # faster than predict() for one image
+    _, class_names = load_model()
+    probs = _infer(batch).numpy()[0]
     idx = int(np.argmax(probs))
     return {
         "label": class_names[idx],

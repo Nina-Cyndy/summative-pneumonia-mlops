@@ -472,10 +472,10 @@ def page_monitor():
         mv_val = mv.strftime("%d %b") if mv else "–"
         mv_sub = (mv.strftime("%H:%M UTC") + " · " if mv else "") + ("loaded" if h["model_loaded"] else "not loaded")
         kpi_row([("Uptime", fmt_uptime(h["uptime_seconds"]), "since the API last started", TEAL),
-                 ("Predictions served", f'{h["predictions_served"]:,}', f'{h["prediction_errors"]} errors', INDIGO),
+                 ("Predictions served", f'{h["predictions_served"]:,}', f'{h["prediction_errors"]} errors · {h.get("replicas_online", 1)} replica(s)', INDIGO),
                  ("Avg latency", f"{avg:.0f} ms" if avg else "–", "per prediction", AMBER),
                  ("Model version", mv_val, mv_sub, VIOLET)])
-        md('<div class="fine">Counters are per API process and reset when the service restarts.</div>')
+        md('<div class="fine">Prediction counters are cumulative across all inference replicas. Uptime refers to the control service.</div>')
 
     live_health()
 

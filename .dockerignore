@@ -1,0 +1,17 @@
+.git
+.venv
+__pycache__
+*.pyc
+.ipynb_checkpoints
+*.ipynb
+notebook
+demo_uploads
+results
+locust
+scripts
+data/raw
+data/uploads
+data/retrain_tmp
+data/app.db
+models/archive
+models/*.tmp.h5

@@ -5,6 +5,7 @@ SQLite database: tracks every uploaded training image and every retraining run.
 import json
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,15 @@ CREATE TABLE IF NOT EXISTS uploads (
     sha1        TEXT UNIQUE NOT NULL,
     created_at  TEXT NOT NULL,
     used        INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS replica_stats (
+    replica          TEXT PRIMARY KEY,
+    role             TEXT,
+    started_at       TEXT,
+    predictions      INTEGER NOT NULL DEFAULT 0,
+    errors           INTEGER NOT NULL DEFAULT 0,
+    total_latency_ms REAL    NOT NULL DEFAULT 0,
+    updated_ts       REAL    NOT NULL
 );
 CREATE TABLE IF NOT EXISTS retrain_runs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,14 +67,17 @@ def connect():
         conn.close()
 
 
-def init_db() -> None:
+def init_db(reset_stale: bool = True) -> None:
+    """Create tables. reset_stale=True marks runs still 'running' as interrupted (the process
+    that owned them must have died). Inference replicas pass False so that scaling the
+    replicas up never interrupts a retraining run owned by the control service."""
     with connect() as conn:
         conn.executescript(SCHEMA)
-        # a run still marked "running" at startup means the process died mid-run
-        conn.execute(
-            "UPDATE retrain_runs SET status='interrupted', finished_at=? WHERE status='running'",
-            (now(),),
-        )
+        if reset_stale:
+            conn.execute(
+                "UPDATE retrain_runs SET status='interrupted', finished_at=? WHERE status='running'",
+                (now(),),
+            )
 
 
 # ---------------------------------------------------------------- uploads
@@ -147,3 +160,29 @@ def list_runs(limit: int = 20) -> list:
         d["promoted"] = None if d["promoted"] is None else bool(d["promoted"])
         out.append(d)
     return out
+
+
+# ---------------------------------------------------------------- serving statistics (shared by all replicas)
+def upsert_replica_stats(replica: str, role: str, started_at: str,
+                         predictions: int, errors: int, total_latency_ms: float) -> None:
+    """Each serving process reports its own running totals every few seconds."""
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO replica_stats (replica, role, started_at, predictions, errors, total_latency_ms, updated_ts)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(replica) DO UPDATE SET predictions=excluded.predictions, errors=excluded.errors,
+                   total_latency_ms=excluded.total_latency_ms, updated_ts=excluded.updated_ts""",
+            (replica, role, started_at, predictions, errors, total_latency_ms, time.time()),
+        )
+
+
+def get_stats_totals(online_window: float = 15.0) -> dict:
+    """Totals across every replica (cumulative) + how many replicas reported recently."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(predictions),0) p, COALESCE(SUM(errors),0) e, COALESCE(SUM(total_latency_ms),0) t "
+            "FROM replica_stats").fetchone()
+        online = conn.execute("SELECT COUNT(*) FROM replica_stats WHERE updated_ts > ?",
+                              (time.time() - online_window,)).fetchone()[0]
+    return {"predictions": int(row["p"]), "errors": int(row["e"]),
+            "total_latency_ms": float(row["t"]), "replicas_online": int(online)}

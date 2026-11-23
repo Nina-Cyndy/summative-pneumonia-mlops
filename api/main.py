@@ -8,6 +8,7 @@ Docs (Swagger):  http://localhost:8000/docs
 """
 import json
 import os
+import socket
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -27,6 +28,14 @@ from src.retrain import run_retraining
 START_TIME = time.time()
 START_ISO = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+# SERVICE_ROLE: "all" (default, one process does everything), "inference" (replicated, serves
+# /predict) or "control" (single instance: upload, retraining, dashboards).
+ROLE = os.getenv("SERVICE_ROLE", "all")
+LOAD_MODEL_ON_START = os.getenv("LOAD_MODEL_ON_START", "true").lower() == "true"
+HOSTNAME = socket.gethostname()
+REPLICA_ID = f"{HOSTNAME}-{int(START_TIME)}"
+STATS_INTERVAL = 3          # seconds between reports to the shared statistics table
+
 AUTO_RETRAIN = os.getenv("AUTO_RETRAIN", "true").lower() == "true"
 RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", 50))   # pending uploads that trigger retraining
 MAX_FILE_MB = 10
@@ -39,13 +48,28 @@ _retrain = {"running": False, "trigger": None, "started_at": None,
 _retrain_lock = threading.Lock()
 
 
+def _stats_heartbeat():
+    """Report this process's running totals so /health can aggregate every replica."""
+    while True:
+        with _stats_lock:
+            n, errs, total = _stats["predictions"], _stats["errors"], _stats["total_latency_ms"]
+        try:
+            db.upsert_replica_stats(REPLICA_ID, ROLE, START_ISO, n, errs, total)
+        except Exception:       # noqa: BLE001  (never let monitoring crash serving)
+            pass
+        time.sleep(STATS_INTERVAL)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db.init_db()
-    try:
-        P.load_model()          # warm up so the first request is fast
-    except FileNotFoundError:
-        pass                    # API still starts; /predict answers 503 until a model exists
+    db.init_db(reset_stale=ROLE != "inference")
+    if LOAD_MODEL_ON_START:
+        try:
+            P.load_model()      # warm up so the first request is fast
+        except FileNotFoundError:
+            pass                # API still starts; /predict answers 503 until a model exists
+    if ROLE != "control":
+        threading.Thread(target=_stats_heartbeat, daemon=True).start()
     yield
 
 
@@ -71,8 +95,8 @@ def _start_retrain(trigger: str) -> bool:
     def worker():
         try:
             result = run_retraining(trigger)
-            if result["promoted"]:
-                P.reload_model()                     # serve the new model immediately
+            if result["promoted"] and P.is_loaded():
+                P.reload_model()                     # other replicas reload when they see the new file
             with _retrain_lock:
                 _retrain.update(running=False, last_result=result, last_error=None)
         except Exception as exc:                     # noqa: BLE001
@@ -92,15 +116,18 @@ def root():
 @app.get("/health")
 def health():
     """Model up-time and status (used by the UI)."""
-    with _stats_lock:
-        n, errs, total = _stats["predictions"], _stats["errors"], _stats["total_latency_ms"]
+    totals = db.get_stats_totals()          # aggregated over ALL inference replicas
+    n, errs, total = totals["predictions"], totals["errors"], totals["total_latency_ms"]
+    replicas = totals["replicas_online"]
     with _retrain_lock:
         retraining = _retrain["running"]
     return {
         "status": "ok",
+        "role": ROLE,
         "started_at": START_ISO,
         "uptime_seconds": round(time.time() - START_TIME, 1),
-        "model_loaded": P.is_loaded(),
+        "model_loaded": P.is_loaded() or replicas > 0,
+        "replicas_online": replicas,
         "model_file_exists": M.MODEL_PATH.exists(),
         "model_version": P.model_version(),
         "retraining": retraining,
@@ -128,7 +155,8 @@ def predict(file: UploadFile = File(...)):
     with _stats_lock:
         _stats["predictions"] += 1
         _stats["total_latency_ms"] += latency
-    return {**result, "latency_ms": round(latency, 1), "model_version": P.model_version()}
+    return {**result, "latency_ms": round(latency, 1), "model_version": P.model_version(),
+            "served_by": HOSTNAME}
 
 
 @app.post("/upload")
