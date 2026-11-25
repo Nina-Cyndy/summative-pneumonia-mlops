@@ -10,3 +10,4 @@ data/app.db
 demo_uploads/
 models/archive/
 models/pneumonia_model.tmp.h5
+.DS_Store
