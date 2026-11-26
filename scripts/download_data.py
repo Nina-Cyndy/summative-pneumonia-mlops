@@ -15,11 +15,11 @@ from pathlib import Path
 
 from PIL import Image
 
-# ---- Config ---------------------------------------------------------------
+
 KAGGLE_DATASET = "paultimothymooney/chest-xray-pneumonia"
-MAX_TRAIN_PER_CLASS = 2000   # softens class imbalance + keeps repo small
-SAVE_SIZE = (256, 256)       # stored size; the model input is 224x224
-TEST_FRACTION = 0.2          # only used if the dataset has no train/test split
+MAX_TRAIN_PER_CLASS = 2000   
+SAVE_SIZE = (256, 256)       
+TEST_FRACTION = 0.2          
 SEED = 42
 IMG_EXTS = {".png", ".jpg", ".jpeg"}
 
@@ -95,7 +95,6 @@ def main():
     train_files, test_files = {}, {}
     for cls in class_names:
         label = cls.title()  # NORMAL -> Normal, PNEUMONIA -> Pneumonia
-        # merge the tiny original val set (16 images) into train
         train_files[label] = list_images(root / "train" / cls) + list_images(root / "val" / cls)
         test_files[label] = list_images(root / "test" / cls)
 

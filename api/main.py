@@ -28,16 +28,14 @@ from src.retrain import run_retraining
 START_TIME = time.time()
 START_ISO = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-# SERVICE_ROLE: "all" (default, one process does everything), "inference" (replicated, serves
-# /predict) or "control" (single instance: upload, retraining, dashboards).
 ROLE = os.getenv("SERVICE_ROLE", "all")
 LOAD_MODEL_ON_START = os.getenv("LOAD_MODEL_ON_START", "true").lower() == "true"
 HOSTNAME = socket.gethostname()
 REPLICA_ID = f"{HOSTNAME}-{int(START_TIME)}"
-STATS_INTERVAL = 3          # seconds between reports to the shared statistics table
+STATS_INTERVAL = 3          
 
 AUTO_RETRAIN = os.getenv("AUTO_RETRAIN", "true").lower() == "true"
-RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", 50))   # pending uploads that trigger retraining
+RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", 50))   
 MAX_FILE_MB = 10
 
 _stats = {"predictions": 0, "errors": 0, "total_latency_ms": 0.0}
@@ -55,7 +53,7 @@ def _stats_heartbeat():
             n, errs, total = _stats["predictions"], _stats["errors"], _stats["total_latency_ms"]
         try:
             db.upsert_replica_stats(REPLICA_ID, ROLE, START_ISO, n, errs, total)
-        except Exception:       # noqa: BLE001  (never let monitoring crash serving)
+        except Exception:       
             pass
         time.sleep(STATS_INTERVAL)
 
@@ -65,9 +63,9 @@ async def lifespan(app: FastAPI):
     db.init_db(reset_stale=ROLE != "inference")
     if LOAD_MODEL_ON_START:
         try:
-            P.load_model()      # warm up so the first request is fast
+            P.load_model()      
         except FileNotFoundError:
-            pass                # API still starts; /predict answers 503 until a model exists
+            pass                
     if ROLE != "control":
         threading.Thread(target=_stats_heartbeat, daemon=True).start()
     yield
@@ -96,10 +94,10 @@ def _start_retrain(trigger: str) -> bool:
         try:
             result = run_retraining(trigger)
             if result["promoted"] and P.is_loaded():
-                P.reload_model()                     # other replicas reload when they see the new file
+                P.reload_model()                     
             with _retrain_lock:
                 _retrain.update(running=False, last_result=result, last_error=None)
-        except Exception as exc:                     # noqa: BLE001
+        except Exception as exc:                     
             with _retrain_lock:
                 _retrain.update(running=False, last_error=str(exc))
 
@@ -107,7 +105,6 @@ def _start_retrain(trigger: str) -> bool:
     return True
 
 
-# ------------------------------------------------------------------ endpoints
 @app.get("/")
 def root():
     return {"service": "pneumonia-mlops-api", "docs": "/docs", "health": "/health"}
@@ -116,7 +113,7 @@ def root():
 @app.get("/health")
 def health():
     """Model up-time and status (used by the UI)."""
-    totals = db.get_stats_totals()          # aggregated over ALL inference replicas
+    totals = db.get_stats_totals()          
     n, errs, total = totals["predictions"], totals["errors"], totals["total_latency_ms"]
     replicas = totals["replicas_online"]
     with _retrain_lock:
@@ -147,7 +144,7 @@ def predict(file: UploadFile = File(...)):
         result = P.predict_bytes(data)
     except FileNotFoundError as exc:
         raise HTTPException(503, str(exc))
-    except Exception:                                # unreadable / not an image
+    except Exception:                                
         with _stats_lock:
             _stats["errors"] += 1
         raise HTTPException(400, "Could not read the file as an image (use .jpg/.jpeg/.png)")

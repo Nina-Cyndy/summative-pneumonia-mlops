@@ -14,7 +14,7 @@ TRAIN_DIR = ROOT / "data" / "train"
 TEST_DIR = ROOT / "data" / "test"
 UPLOAD_DIR = ROOT / "data" / "uploads"
 
-IMG_SIZE = (224, 224)   # MobileNetV2's native input size
+IMG_SIZE = (224, 224)   
 BATCH_SIZE = 32
 SEED = 42
 IMG_EXTS = {".png", ".jpg", ".jpeg"}
@@ -22,9 +22,6 @@ IMG_EXTS = {".png", ".jpg", ".jpeg"}
 AUTOTUNE = tf.data.AUTOTUNE
 
 
-# ---------------------------------------------------------------------------
-# Cleaning
-# ---------------------------------------------------------------------------
 def clean_dataset(root: Path) -> int:
     """Delete unreadable/corrupt images so tf.data never crashes mid-epoch.
     Returns the number of files removed."""
@@ -57,9 +54,6 @@ def count_images(root: Path) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Augmentation (training only)
-# ---------------------------------------------------------------------------
 def get_augmentation() -> tf.keras.Sequential:
     """Mild augmentation. No vertical flips: chest X-rays always have the
     same orientation, so flipping them upside down is unrealistic."""
@@ -74,9 +68,6 @@ def get_augmentation() -> tf.keras.Sequential:
     )
 
 
-# ---------------------------------------------------------------------------
-# tf.data pipelines
-# ---------------------------------------------------------------------------
 def load_train_val(train_dir: Path = TRAIN_DIR, val_split: float = 0.2,
                    class_names: list | None = None, augment: bool = True):
     """Returns (train_ds, val_ds). Pixels stay 0-255: the model rescales
@@ -120,9 +111,6 @@ def load_test(test_dir: Path = TEST_DIR, class_names: list | None = None):
     return ds.prefetch(AUTOTUNE)
 
 
-# ---------------------------------------------------------------------------
-# Single-image preprocessing (prediction)
-# ---------------------------------------------------------------------------
 def preprocess_image_bytes(data: bytes) -> np.ndarray:
     """Raw uploaded bytes -> float32 array of shape (1, H, W, 3), 0-255."""
     img = Image.open(io.BytesIO(data)).convert("RGB").resize(IMG_SIZE)

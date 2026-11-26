@@ -34,9 +34,6 @@ CLASS_NAMES_PATH = MODEL_DIR / "class_names.json"
 METRICS_PATH = MODEL_DIR / "metrics.json"
 
 
-# ---------------------------------------------------------------------------
-# Architectures
-# ---------------------------------------------------------------------------
 def build_baseline_cnn(num_classes: int = 2) -> tf.keras.Model:
     """Vanilla CNN with NO optimisation techniques (no pretrained weights, no
     dropout, no regularisation). Used only as a baseline to show that the
@@ -56,14 +53,13 @@ def build_model(num_classes: int = 2, l2: float = 1e-4, dropout: float = 0.4,
                 weights: str | None = "imagenet") -> tf.keras.Model:
     """MobileNetV2 transfer-learning model. Base starts FROZEN."""
     inputs = tf.keras.Input(shape=IMG_SIZE + (3,), name="image")
-    # MobileNetV2 expects pixels in [-1, 1]; incoming pixels are 0-255.
     x = tf.keras.layers.Rescaling(1.0 / 127.5, offset=-1.0, name="rescale")(inputs)
 
     base = tf.keras.applications.MobileNetV2(
         input_shape=IMG_SIZE + (3,), include_top=False, weights=weights
     )
     base.trainable = False
-    x = base(x, training=False)  # training=False keeps BatchNorm in inference mode
+    x = base(x, training=False)  
 
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.Dropout(dropout)(x)
@@ -106,11 +102,9 @@ def compile_model(model: tf.keras.Model, lr: float = 1e-3) -> None:
 
 def get_callbacks(patience: int = 4) -> list:
     return [
-        # stop when validation loss stops improving, keep the best weights
         tf.keras.callbacks.EarlyStopping(
             monitor="val_loss", patience=patience, restore_best_weights=True
         ),
-        # cut the learning rate when progress stalls
         tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss", factor=0.3, patience=2, min_lr=1e-7, verbose=1
         ),
@@ -126,9 +120,6 @@ def compute_class_weights(train_dir: Path = TRAIN_DIR) -> dict:
     return {i: total / (len(names) * counts[n]) for i, n in enumerate(names)}
 
 
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 def train_two_phase(model, train_ds, val_ds, class_weight=None,
                     epochs_head: int = 10, epochs_finetune: int = 10,
                     lr_head: float = 1e-3, lr_finetune: float = 1e-5,
@@ -146,9 +137,6 @@ def train_two_phase(model, train_ds, val_ds, class_weight=None,
     return h1, h2
 
 
-# ---------------------------------------------------------------------------
-# Evaluation
-# ---------------------------------------------------------------------------
 def evaluate_model(model, test_ds, class_names: list, positive_class: str = "Pneumonia"):
     """Evaluate on a dataset (shuffle=False!). Returns a metrics dict plus
     y_true / y_prob for plotting."""
@@ -176,9 +164,6 @@ def evaluate_model(model, test_ds, class_names: list, positive_class: str = "Pne
     return metrics, report, y_true, y_prob
 
 
-# ---------------------------------------------------------------------------
-# Saving / loading
-# ---------------------------------------------------------------------------
 def save_artifacts(model, class_names: list, metrics: dict | None = None,
                    model_path: Path = MODEL_PATH) -> None:
     """Save the model (.h5), the class-name order and the latest metrics.

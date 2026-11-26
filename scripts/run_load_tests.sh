@@ -22,7 +22,7 @@ SSH_KEY="${SSH_KEY:-}"
 REMOTE_DIR="${REMOTE_DIR:-~/summative-pneumonia-mlops}"
 mkdir -p "$OUT_DIR"
 
-scale() {   # scale the inference service to $1 containers (locally or over SSH)
+scale() {   
   if [ -n "$SSH_TARGET" ]; then
     ssh ${SSH_KEY:+-i "$SSH_KEY"} -o StrictHostKeyChecking=accept-new "$SSH_TARGET" \
       "cd $REMOTE_DIR && docker compose up -d --scale inference=$1 --wait"
@@ -35,7 +35,7 @@ for N in $COUNTS; do
   echo
   echo "=================  $N inference container(s)  ================="
   scale "$N"
-  sleep 12      # let Nginx refresh its DNS view of the replicas and the models warm up
+  sleep 12      
   SERVED_OUT="$OUT_DIR/served_n${N}.json" locust -f locust/locustfile.py --headless \
       -u "$USERS" -r "$SPAWN" -t "$DURATION" --host "$HOST" \
       --csv "$OUT_DIR/n${N}" --only-summary

@@ -30,11 +30,11 @@ def _load_images():
 
 
 IMAGES = _load_images()
-SERVED_BY = Counter()          # which container answered each request
+SERVED_BY = Counter()          
 
 
 class XrayUser(HttpUser):
-    wait_time = between(0.05, 0.25)    # a "flood": very short think time
+    wait_time = between(0.05, 0.25)    
 
     @task
     def predict(self):

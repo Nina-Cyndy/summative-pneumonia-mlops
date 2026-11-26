@@ -11,7 +11,7 @@ from PIL import Image
 from src import database as db
 from src.preprocessing import ROOT, UPLOAD_DIR
 
-SAVE_SIZE = (256, 256)   # same stored size as the original training data
+SAVE_SIZE = (256, 256)   
 
 
 def ingest_image(data: bytes, label: str, original_name: str = "") -> str:

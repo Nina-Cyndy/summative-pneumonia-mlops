@@ -30,7 +30,6 @@ CLASS_COLORS = {"Normal": TEAL, "Pneumonia": CORAL}
 st.set_page_config(page_title="PneumoScan · MLOps Console", page_icon="🫁",
                    layout="wide", initial_sidebar_state="expanded")
 
-# ======================================================================= styling
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, .stApp, [class*="css"] { font-family: 'Inter', sans-serif; }
@@ -156,7 +155,6 @@ header[data-testid="stHeader"] { background: transparent; }
 st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
 
 
-# ======================================================================= helpers
 def esc(x) -> str:
     return html.escape(str(x))
 
@@ -289,7 +287,6 @@ def effect_label(d: float) -> str:
     return "negligible" if d < 0.2 else "small" if d < 0.5 else "medium" if d < 0.8 else "large"
 
 
-# ======================================================================= sidebar + routing
 NAV = ["🩻  Diagnose", "📊  Data Insights", "🛰️  Model Monitor", "🔁  Retrain Studio"]
 
 code, health = api("GET", "/health", timeout=3)
@@ -313,7 +310,6 @@ if not online:
     st.stop()
 
 
-# ======================================================================= page: Diagnose
 def result_html(out: dict) -> str:
     label = out["label"]
     bad = label.lower() == "pneumonia"
@@ -369,7 +365,6 @@ def page_diagnose():
                'The result will appear here.</div>')
 
 
-# ======================================================================= page: Data Insights
 FEATURE_INFO = {
     "brightness": ("Overall brightness", "Mean pixel intensity of the whole image. It also depends on the X-ray machine, patient size and positioning, so it is a noisy signal."),
     "contrast": ("Contrast", "Spread of light and dark pixels. Healthy lungs are dark, air-filled regions next to bright bones; fluid can flatten that difference."),
@@ -404,7 +399,6 @@ def page_insights():
              ("Uploaded by users", f"{n_up:,}", "added for retraining", AMBER),
              ("Pneumonia : Normal", f"{ratio:.2f} : 1", "class ratio in training data", CORAL)])
 
-    # ---- feature 1: class balance
     section("1 · Class balance", "How many images of each class are in each part of the data")
     classes = sorted(set(train) | set(test) | set(ups))
     fig = go.Figure()
@@ -417,7 +411,6 @@ def page_insights():
        'A model that always answered "Pneumonia" would already look decent on accuracy alone, so accuracy is not enough. '
        'We use class weights while training and judge the model with precision, recall, F1 and AUC.</div>')
 
-    # ---- features 2-4: image statistics
     df = pd.DataFrame(ins["features"])
     section("2 · What the images look like in numbers",
             f"Three simple measurements on a random sample of {ins['sample_per_class']} images per class")
@@ -437,7 +430,6 @@ def page_insights():
             effects[title] = d
             md(f'<div class="insight">{text}<br><span style="color:#64748B">{esc(meaning)}</span></div>')
 
-    # ---- the story
     best, d_best = max(effects.items(), key=lambda kv: abs(kv[1]))
     if abs(d_best) < 1.0:
         verdict = ("No single measurement separates the two classes cleanly: the strongest signal is "
@@ -453,7 +445,6 @@ def page_insights():
        'transfer learning with MobileNetV2 instead of a classic model on summary numbers.</div>')
 
 
-# ======================================================================= page: Model Monitor
 def page_monitor():
     header("Model Monitor", "Live service health and how well the model in production performs", "🛰️")
 
@@ -513,7 +504,6 @@ def page_monitor():
            'so a model that leans cautious (high recall, more false alarms) is the safer trade-off.</div>')
 
 
-# ======================================================================= page: Retrain Studio
 def outcome_badge(run: dict) -> str:
     if run["status"] == "running":
         return badge("Running", "info")
@@ -575,7 +565,6 @@ def bulk_upload(files, label):
 def page_retrain():
     header("Retrain Studio", "Add new labelled X-rays and teach the model with them", "🔁")
 
-    # ---------------- step 1: upload
     step(1, "Upload new training images", "All files in one upload must belong to the same class")
     c, summ = api("GET", "/data/summary")
     classes = sorted((summ or {}).get("train", {}).keys()) or ["Normal", "Pneumonia"]
@@ -603,7 +592,6 @@ def page_retrain():
             if res["auto_started"]:
                 md('<div class="insight">The automatic trigger fired: enough new images arrived, so retraining has started.</div>')
 
-    # ---------------- steps 2 + 3: live status
     @live("3s")
     def studio_status():
         cs, state = api("GET", "/retrain/status", timeout=5)
@@ -668,5 +656,4 @@ def page_retrain():
     studio_status()
 
 
-# ======================================================================= router
 {NAV[0]: page_diagnose, NAV[1]: page_insights, NAV[2]: page_monitor, NAV[3]: page_retrain}[page]()

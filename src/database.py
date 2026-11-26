@@ -80,7 +80,6 @@ def init_db(reset_stale: bool = True) -> None:
             )
 
 
-# ---------------------------------------------------------------- uploads
 def has_hash(sha1: str) -> bool:
     with connect() as conn:
         return conn.execute("SELECT 1 FROM uploads WHERE sha1=?", (sha1,)).fetchone() is not None
@@ -126,7 +125,6 @@ def mark_uploads_used(up_to_id: int) -> None:
         conn.execute("UPDATE uploads SET used=1 WHERE used=0 AND id<=?", (up_to_id,))
 
 
-# ---------------------------------------------------------------- retraining runs
 def start_run(trigger_type: str) -> int:
     with connect() as conn:
         cur = conn.execute(
@@ -162,7 +160,6 @@ def list_runs(limit: int = 20) -> list:
     return out
 
 
-# ---------------------------------------------------------------- serving statistics (shared by all replicas)
 def upsert_replica_stats(replica: str, role: str, started_at: str,
                          predictions: int, errors: int, total_latency_ms: float) -> None:
     """Each serving process reports its own running totals every few seconds."""

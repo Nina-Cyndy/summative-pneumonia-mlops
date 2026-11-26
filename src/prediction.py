@@ -26,7 +26,7 @@ for _env, _setter in (("TF_INTRA_THREADS", tf.config.threading.set_intra_op_para
     if _n > 0:
         try:
             _setter(_n)
-        except RuntimeError:        # TensorFlow already initialised: keep its defaults
+        except RuntimeError:        
             pass
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,9 +45,9 @@ def _build_infer(model):
     try:
         fn = tf.function(lambda x: model(x, training=False),
                          input_signature=[tf.TensorSpec([None, *IMG_SIZE, 3], tf.float32)])
-        fn(np.zeros((1, *IMG_SIZE, 3), dtype="float32"))     # warm-up: trace once
+        fn(np.zeros((1, *IMG_SIZE, 3), dtype="float32"))    
         return fn
-    except Exception:                                         # noqa: BLE001
+    except Exception:                                         
         return lambda x: model(x, training=False)
 
 
@@ -60,7 +60,7 @@ def load_model(force: bool = False):
         if _model is None or force or (mtime is not None and mtime != _loaded_mtime):
             if mtime is None:
                 raise FileNotFoundError(f"No trained model at {MODEL_PATH}. Train one first.")
-            _model = tf.keras.models.load_model(MODEL_PATH, compile=False)   # inference only
+            _model = tf.keras.models.load_model(MODEL_PATH, compile=False)   
             _class_names = (json.loads(CLASS_NAMES_PATH.read_text())
                             if CLASS_NAMES_PATH.exists() else get_class_names())
             _infer = _build_infer(_model)
