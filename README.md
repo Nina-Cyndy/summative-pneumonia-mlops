@@ -4,7 +4,7 @@ A complete machine-learning cycle on **image data**: data acquisition, preproces
 
 | | |
 |---|---|
-| **Video demo (YouTube)** | **TODO: paste the YouTube link** |
+| **Video demo (YouTube)** | https://youtu.be/2alUjAgDaTs?si=Ol2dlgwCYmhvi6C_ |
 | **Live deployment (Microsoft Azure VM)** | UI: http://158.158.2.61:8501 &nbsp;&middot;&nbsp; API docs: http://158.158.2.61:8000/docs <br>_The server may be switched off after grading to save cloud credit; the video shows the deployment, and the stack starts anywhere with one command (see [Quick start](#5-quick-start-docker))._ |
 | **GitHub repository** | https://github.com/Nina-Cyndy/summative-pneumonia-mlops |
 
