@@ -24,7 +24,7 @@ def main():
     root = find_dataset_root(get_source())
     if root is None:
         raise SystemExit("Original dataset not found.")
-    rng = random.Random(7)
+    rng = random.Random(9)
     if OUT.exists():
         shutil.rmtree(OUT)
     for cls in sorted(d.name for d in (root / "train").iterdir() if d.is_dir()):

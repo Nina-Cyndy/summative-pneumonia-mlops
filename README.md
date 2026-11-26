@@ -5,7 +5,7 @@ A complete machine-learning cycle on **image data**: data acquisition, preproces
 | | |
 |---|---|
 | **Video demo (YouTube)** | **TODO: paste the YouTube link** |
-| **Live URL** | **TODO: add the public URL here if you deploy to a cloud VM, otherwise delete this row** (the stack runs with one command, see [Quick start](#quick-start-docker)) |
+| **Live deployment (Microsoft Azure VM)** | UI: http://158.158.2.61:8501 &nbsp;&middot;&nbsp; API docs: http://158.158.2.61:8000/docs <br>_The server may be switched off after grading to save cloud credit; the video shows the deployment, and the stack starts anywhere with one command (see [Quick start](#5-quick-start-docker))._ |
 | **GitHub repository** | https://github.com/Nina-Cyndy/summative-pneumonia-mlops |
 
 > **Disclaimer.** This is an educational project trained on a public dataset. It is not a medical device and must not be used for diagnosis.
@@ -112,6 +112,25 @@ The promotion rule favours recall because missing a case is the costlier error: 
 * Two containers gave 1.6x the throughput and four gave 1.9x, with the median response time falling 57% (1200 ms to 520 ms). Scaling is not linear because all containers, Nginx and Locust share the CPU cores of one laptop; more containers help only up to the number of cores available.
 * The table comes from Locust's CSV, which is written every few seconds, so request counts can differ from the final terminal summary by under 1%.
 
+### 4b. Flood test against the Azure deployment
+
+The same test (`scripts/run_load_tests.sh`, containers scaled over SSH) was repeated with **Locust running on a laptop and the stack running on the Azure VM**, so the traffic crossed the public internet. Settings: 50 users, spawn rate 10/s, 60 s per run, Locust's final summary.
+
+| Inference containers | Requests | Failures | Throughput (req/s) | Avg (ms) | Median (ms) | p95 (ms) | p99 (ms) | Max (ms) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 3,929 | 0 (0.0%) | 66.0 | 576 | 580 | 700 | 810 | 955 |
+| 2 | 4,017 | 0 (0.0%) | 67.3 | 564 | 560 | 890 | 1100 | 1711 |
+| 4 | 3,821 | 0 (0.0%) | 64.0 | 599 | 530 | 1200 | 1400 | 1586 |
+
+**Reading the results**
+
+* No request failed, and Nginx again balanced the load evenly (50% / 50% across two containers, about 25% each across four).
+* **Here, adding containers did not increase throughput**: it stayed between 64 and 67 requests/s. So in this test the limit was not the number of model containers.
+* A single container on Azure handled 66 requests/s, about twice what one container handled in Docker Desktop on the laptop (35 requests/s, section 4).
+* The fastest request took about 160 ms, which is mostly the internet round trip between the laptop and the server. With 50 users and a short think time, throughput is bounded by users / (response time + think time), which matches the numbers (50 / (0.58 s + 0.15 s) is about 69 requests/s).
+* **What limited the throughput was not measured.** Plausible causes are the laptop's internet upload link (each request uploads a 13-15 KB image, so 66 requests/s is about 1 MB/s, or 8 Mbit/s), the CPU of the small VM shared by all containers, or Locust itself. A fair way to check would be to run Locust on the VM itself, which removes the internet from the measurement.
+* Together with section 4, this shows that the result of a load test depends on where the load is generated and on the machine running the containers, not only on the number of replicas.
+
 ---
 
 ## 5. Quick start (Docker)
@@ -142,6 +161,16 @@ python scripts/summarize_load_tests.py             # writes results/summary.md a
 ```
 
 Options: `USERS=100 SPAWN=20 DURATION=90s COUNTS="1 2 4" bash scripts/run_load_tests.sh`. To test a remote server, see the header of `scripts/run_load_tests.sh`.
+
+### Cloud deployment (Microsoft Azure)
+
+The same Docker Compose stack runs on a Microsoft Azure virtual machine (Azure for Students subscription).
+
+* VM: Ubuntu Server 24.04 LTS (x64), **TODO: write the VM size (for example Standard_B2ms) and region from the Azure portal**, public IP `158.158.2.61`.
+* Network rules open TCP ports **8501** (UI) and **8000** (API through Nginx); SSH uses a key pair.
+* Setup on the VM: install Docker, `git clone` this repository, `docker compose up -d --build`. The image is built on the server itself, so it matches the VM's x86 architecture.
+* Model evaluation in production: the **Model Monitor** page and `GET /metrics` of the deployed service show the metrics of the model currently served, and the **Retrain Studio** page shows every retraining run.
+* The VM is stopped (deallocated) when not in use to save credit.
 
 ---
 
@@ -235,14 +264,14 @@ summative-pneumonia-mlops/
 | Retraining with a trigger | `src/retrain.py`; manual button and automatic threshold in `api/main.py` |
 | API with Python | `api/main.py` (FastAPI) |
 | UI: uptime, visualisations, train/retrain access | `ui/app.py` |
-| Deployment, evaluation in production | `docker-compose.yml`; Model Monitor page and `/metrics` |
-| Flood simulation with different numbers of containers | `locust/locustfile.py`, section 4 |
+| Deployment, evaluation in production | `docker-compose.yml`, Azure VM deployment (section 5); Model Monitor page and `/metrics` |
+| Flood simulation with different numbers of containers | `locust/locustfile.py`, sections 4 and 4b |
 | Predict one image; bulk upload; retrain button | Diagnose and Retrain Studio pages |
 
 ## 10. Limitations
 
 * Single public dataset; no clinical validation. Test accuracy (87%) is far below validation accuracy (97%), most likely because of dataset shift.
 * Label quality is the user's responsibility: wrongly labelled uploads teach the model wrong patterns. The promotion gate limits but does not remove the damage.
-* The retrain endpoint is open: anyone who can reach the server can upload and retrain. Put authentication in front of it before any real deployment.
+* The retrain endpoint is open: anyone who can reach the server can upload and retrain, and the Azure deployment exposes it publicly. Put authentication in front of it before any real deployment.
 * The shared SQLite database and volumes suit a single host; a multi-host deployment would need a managed database and object storage.
 * Load-test numbers depend on the machine: Locust, Nginx and the containers shared one laptop.
