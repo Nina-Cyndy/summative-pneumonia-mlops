@@ -94,7 +94,7 @@ The promotion rule favours recall because missing a case is the costlier error: 
 
 ## 4. Flood-request simulation (Locust)
 
-**Setup.** `POST /predict` with real X-ray images from `data/test`, **50 simulated users**, spawn rate 10 users/s, **60 seconds per run**, 0.05 to 0.25 s between requests per user. Locust and Docker Desktop ran on the **same MacBook** (Docker Desktop CPUs: **TODO: write the number from Docker Desktop > Settings > Resources**). Each inference container is limited to one TensorFlow CPU thread so replicas scale fairly. Nginx balances round-robin.
+**Setup.** `POST /predict` with real X-ray images from `data/test`, **50 simulated users**, spawn rate 10 users/s, **60 seconds per run**, 0.05 to 0.25 s between requests per user. Locust and Docker Desktop ran on the **same MacBook** (Docker Desktop CPUs: **8**). Each inference container is limited to one TensorFlow CPU thread so replicas scale fairly. Nginx balances round-robin.
 
 | Inference containers | Requests | Failures | Throughput (req/s) | Avg (ms) | Median (ms) | p95 (ms) | p99 (ms) | Max (ms) |
 |---|---|---|---|---|---|---|---|---|
@@ -166,7 +166,7 @@ Options: `USERS=100 SPAWN=20 DURATION=90s COUNTS="1 2 4" bash scripts/run_load_t
 
 The same Docker Compose stack runs on a Microsoft Azure virtual machine (Azure for Students subscription).
 
-* VM: Ubuntu Server 24.04 LTS (x64), **TODO: write the VM size (for example Standard_B2ms) and region from the Azure portal**, public IP `158.158.2.61`.
+* VM: Ubuntu Server 24.04 LTS (x64),size: Standard B2s v2 (2 vcpus, 8 GiB memory), Location: Spain Central (Zone 1), public IP `158.158.2.61`.
 * Network rules open TCP ports **8501** (UI) and **8000** (API through Nginx); SSH uses a key pair.
 * Setup on the VM: install Docker, `git clone` this repository, `docker compose up -d --build`. The image is built on the server itself, so it matches the VM's x86 architecture.
 * Model evaluation in production: the **Model Monitor** page and `GET /metrics` of the deployed service show the metrics of the model currently served, and the **Retrain Studio** page shows every retraining run.
